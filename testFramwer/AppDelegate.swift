@@ -16,8 +16,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Override point for customization after application launch.
         
         self.window = UIWindow.init(frame: UIScreen.main.bounds)
-        let navi = UINavigationController.init(rootViewController: ViewController())
-        self.window?.rootViewController = navi
+        if #available(iOS 14.0, *) {
+            let navi = UINavigationController.init(rootViewController: ViewController())
+            self.window?.rootViewController = navi
+        } else {
+            // Fallback on earlier versions
+        }
         self.window?.makeKeyAndVisible()
         
         return true

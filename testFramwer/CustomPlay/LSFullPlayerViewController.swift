@@ -17,6 +17,8 @@ protocol LSFullPlayerViewControllerDelegate: NSObject {
 
 class LSFullPlayerViewController: UIViewController {
     weak var delegate: LSFullPlayerViewControllerDelegate?
+    
+    /// 弹出倍速菜单背景整个屏幕
     private lazy var popBkgView: UIButton = {
         let tempView = UIButton()
         tempView.frame = CGRect.init(x: 0, y: 0, width: kScreenWidth, height: kScreenHeight)
@@ -24,7 +26,15 @@ class LSFullPlayerViewController: UIViewController {
         return tempView
         
     }()
-    private var tapTimer: Timer?
+    
+    private lazy var bkgView: UIButton = {
+        let tempView = UIButton()
+        tempView.frame = CGRect.init(x: 0, y: 0, width: kScreenWidth, height: kScreenHeight)
+        tempView.backgroundColor = UIColor(red: 0, green: 0, blue: 0, alpha: 0)
+        tempView.addTarget(self, action: #selector(tapAction), for: .touchUpInside)
+        return tempView
+    }()
+
     private var speedMenuView: SpeedMenuView?
     private var fullScreenPlayerLayer: AVPlayerLayer
     private var disposeBag = DisposeBag()
@@ -132,19 +142,31 @@ class LSFullPlayerViewController: UIViewController {
             }
         }.disposed(by: self.disposeBag)
         
-        /// 倍速按钮
+        // 倍速按钮
         self.fullScreenControlView.speedBtn.rx.tap
             .subscribe { [weak self] _ in
                 guard let `self` = self else { return }
                 self.showSpeedMenuItmes()
             }.disposed(by: self.disposeBag)
         
-        /// 背景
+        // 背景隐藏speed菜单
         self.popBkgView.rx.tap
             .subscribe { [weak self] _ in
                 guard let `self` = self else { return }
                 self.hideSpeedMenu()
             }.disposed(by: self.disposeBag)
+        
+        // 是否隐藏控制栏
+        self.playerManager.controlState
+            .subscribe { [weak self] isShow in
+                guard let `self` = self else { return }
+                if isShow {
+                    self.showControl()
+                }else{
+                    self.dismissControl()
+                }
+            }.disposed(by: self.disposeBag)
+        
     }
     
     /// 更新进度
@@ -159,6 +181,7 @@ class LSFullPlayerViewController: UIViewController {
     }
     
     private func setupUI() {
+        view.addSubview(bkgView)
         view.addSubview(closeBtn)
         view.addSubview(playAndPauseBtn)
         closeBtn.snp.makeConstraints { make in
@@ -167,28 +190,41 @@ class LSFullPlayerViewController: UIViewController {
             make.width.height.equalTo(40)
         }
         
-        let tap = UITapGestureRecognizer.init(target: self, action: #selector(tapAction))
-        tap.numberOfTouchesRequired = 1
-        self.view.addGestureRecognizer(tap)
+        bkgView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+        
+//        let tap = UITapGestureRecognizer.init(target: self, action: #selector(tapAction))
+//        tap.numberOfTouchesRequired = 1
+//        self.view.addGestureRecognizer(tap)
     }
     
     @objc func tapAction() {
-        if self.playerManager.isPlaying.value {
-            if self.playAndPauseBtn.isHidden == false {
-                self.playAndPauseBtn.isHidden = true
-                return
-            }
+        self.playerManager.tapAction()
+    }
+    
+    
+    private func dismissControl() {
+        UIView.animate(withDuration: 0.3) {
+            self.playAndPauseBtn.alpha = 0
+            self.fullScreenControlView.alpha = 0
+            self.closeBtn.alpha = 0
+        } completion: { flag in
+            self.playAndPauseBtn.isHidden = true
+            self.fullScreenControlView.isHidden = true
+            self.closeBtn.isHidden = true
         }
-        
-        if let time = self.tapTimer {
-            time.invalidate()
-        }
+    }
+    
+    private func showControl() {
         self.playAndPauseBtn.isHidden = false
-        tapTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: false, block: { pTime in
-            if self.playerManager.isPlaying.value {
-                self.playAndPauseBtn.isHidden = true
-            }
-        })
+        self.fullScreenControlView.isHidden = false
+        self.closeBtn.isHidden = false
+        UIView.animate(withDuration: 0.3) {
+            self.playAndPauseBtn.alpha = 1
+            self.fullScreenControlView.alpha = 1
+            self.closeBtn.alpha = 1
+        }
     }
     
     required init?(coder: NSCoder) {
@@ -203,8 +239,7 @@ class LSFullPlayerViewController: UIViewController {
         animationContainer = UIView(frame: originFrame)
         animationContainer.clipsToBounds = true
         animationContainer.layer.insertSublayer(fullScreenPlayerLayer, at: 0)
-        view.addSubview(animationContainer)
-        
+        view.insertSubview(animationContainer, at: 0)
         // 初始设置 layer frame
         fullScreenPlayerLayer.frame = animationContainer.bounds
         

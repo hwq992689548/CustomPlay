@@ -38,20 +38,12 @@ class LSPlayControllerView: UIView {
     
     private lazy var totalTimeLab: UILabel = {
         let tempLab = UILabel()
-        tempLab.text = " / 00:00"
+        tempLab.text = "00:00"
         tempLab.textColor = .white
         tempLab.font = UIFont.systemFont(ofSize: 14)
         return tempLab
     }()
-    
-    //    lazy var playAndPauseBtn: UIButton = {
-    //        let tempBtn = UIButton()
-    //        tempBtn.setImage(UIImage(systemName: "play.fill"), for: .normal)
-    //        tempBtn.setImage(UIImage(systemName: "pause.fill"), for: .selected)
-    //        tempBtn.tintColor = .white
-    //        return tempBtn
-    //    }()
-    
+   
     lazy var speedBtn: UIButton = {
         let tempBtn = UIButton()
         tempBtn.setImage(UIImage.init(systemName: "speedometer"), for: .normal)
@@ -75,7 +67,7 @@ class LSPlayControllerView: UIView {
     
     var totalTime: Double = 0 {
         didSet {
-            totalTimeLab.text = " / \(formatTime(totalTime))"
+            totalTimeLab.text = "\(formatTime(totalTime))"
         }
     }
     
@@ -83,15 +75,12 @@ class LSPlayControllerView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupUI()
-        bindActions()
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
-    
-    
+        
     // MARK: - Setup
     private func setupUI() {
         backgroundColor = UIColor(red: 0, green: 0, blue: 0, alpha: 0.4)
@@ -101,30 +90,25 @@ class LSPlayControllerView: UIView {
         addSubview(currentTimeLab)
         addSubview(totalTimeLab)
         addSubview(speedBtn)
-        //        addSubview(fullBtn)
         setupConstraints()
     }
     
     private func setupConstraints() {
-        progressView.snp.makeConstraints { make in
-            make.leading.trailing.equalToSuperview()
-            make.top.equalToSuperview()
-            make.height.equalTo(4)
-        }
-        
-        //        playAndPauseBtn.snp.makeConstraints { make in
-        //            make.leading.equalToSuperview().offset(8)
-        //            make.centerY.equalToSuperview()
-        //            make.width.height.equalTo(30)
-        //        }
-        
         currentTimeLab.snp.makeConstraints { make in
             make.leading.equalToSuperview().offset(8)
             make.centerY.equalToSuperview()
         }
         
+        
+        progressView.snp.makeConstraints { make in
+            make.leading.equalTo(currentTimeLab.snp.trailing).offset(8)
+            make.centerY.equalToSuperview()
+            make.height.equalTo(6)
+            make.trailing.equalTo(totalTimeLab.snp.leading).offset(-8)
+        }
+       
         totalTimeLab.snp.makeConstraints { make in
-            make.leading.equalTo(currentTimeLab.snp.trailing)
+            make.trailing.equalToSuperview().offset(-56)
             make.centerY.equalToSuperview()
         }
         
@@ -135,18 +119,7 @@ class LSPlayControllerView: UIView {
             make.height.equalTo(34)
         }
     }
-    
-    private func bindActions() {
-        //        playAndPauseBtn.rx.tap
-        //            .subscribe(onNext: { [weak self] in
-        //                guard let self = self else { return }
-        //                let select = !self.playAndPauseBtn.isSelected
-        //                self.playAndPauseBtn.isSelected = select
-        //                self.playRelay.accept(select)
-        //            })
-        //            .disposed(by: disposeBag)
-    }
-    
+  
     // MARK: - Public Methods
     func updateFullScreenState(_ isFullScreen: Bool) {
         self.layoutIfNeeded()

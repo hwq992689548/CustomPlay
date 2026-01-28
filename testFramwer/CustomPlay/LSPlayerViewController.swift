@@ -14,7 +14,13 @@ import RxCocoa
 let kScreenWidth = UIScreen.main.bounds.size.width
 let kScreenHeight = UIScreen.main.bounds.size.height
 
-class LSPlayerViewController: UIViewController, UIPopoverPresentationControllerDelegate {
+protocol LSPlayerViewControllerDelegate: AnyObject {
+    func videoPlayerDidStartPlaying(_ player: LSPlayerViewController)
+    func videoPlayerDidFinishPlaying(_ player: LSPlayerViewController)
+    func videoPlayerDidPause(_ player: LSPlayerViewController)
+}
+
+class LSPlayerViewController: UIViewController {
     private lazy var popBkgView: UIButton = {
         let tempView = UIButton()
         tempView.frame = CGRect.init(x: 0, y: 0, width: kScreenWidth, height: kScreenHeight)
@@ -22,11 +28,15 @@ class LSPlayerViewController: UIViewController, UIPopoverPresentationControllerD
         return tempView
         
     }()
+    
+    private var coverImageView: UIImageView?
+    
+    var delegate: LSPlayerViewControllerDelegate?
     private var speedMenuView: SpeedMenuView?
     private var disposeBag = DisposeBag()
     private var controlView = LSPlayControllerView()
     private var playerManager = LSPlayManager()
-    private var tapTimer: Timer?
+    // private var tapTimer: Timer?
     private lazy var playAndPauseBtn: UIButton = {
         let tempBtn = UIButton()
         let config = UIImage.SymbolConfiguration(pointSize: 28, weight: .bold, scale: .large)
@@ -65,8 +75,8 @@ class LSPlayerViewController: UIViewController, UIPopoverPresentationControllerD
     
     deinit {
         print("LSPlayerViewController deinit")
-        self.tapTimer?.invalidate()
-        self.tapTimer = nil
+        //self.tapTimer?.invalidate()
+        //self.tapTimer = nil
     }
     
     override func viewDidLayoutSubviews() {
@@ -103,24 +113,31 @@ class LSPlayerViewController: UIViewController, UIPopoverPresentationControllerD
     }
     
     @objc func tapAction() {
-        if self.playerManager.isPlaying.value {
-            if self.playAndPauseBtn.isHidden == false {
-                self.playAndPauseBtn.isHidden = true
-                return
-            }
-        }
-        
-        if let time = self.tapTimer {
-            time.invalidate()
-        }
-        self.playAndPauseBtn.isHidden = false
-        tapTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: false, block: { pTime in
-            if self.playerManager.isPlaying.value {
-                self.playAndPauseBtn.isHidden = true
-            }
-        })
+        self.playerManager.tapAction()
     }
     
+    private func dismissControl() {
+        UIView.animate(withDuration: 0.3) {
+            self.playAndPauseBtn.alpha = 0
+            self.controlView.alpha = 0
+            self.enterFullBtn.alpha = 0
+        } completion: { flag in
+            self.playAndPauseBtn.isHidden = true
+            self.controlView.isHidden = true
+            self.enterFullBtn.isHidden = true
+        }
+    }
+    
+    private func showControl() {
+        self.playAndPauseBtn.isHidden = false
+        self.controlView.isHidden = false
+        self.enterFullBtn.isHidden = false
+        UIView.animate(withDuration: 0.3) {
+            self.playAndPauseBtn.alpha = 1
+            self.controlView.alpha = 1
+            self.enterFullBtn.alpha = 1
+        }
+    }
     private func updateProgress() {
         let duration = self.playerManager.duration.value
         guard duration > 0 else {
@@ -176,23 +193,44 @@ class LSPlayerViewController: UIViewController, UIPopoverPresentationControllerD
             let isPlay = self.playerManager.isPlaying.value
             if !isPlay {
                 self.playerManager.play()
+                self.delegate?.videoPlayerDidStartPlaying(self)
             } else {
                 self.playerManager.pause()
+                self.delegate?.videoPlayerDidPause(self)
             }
         }.disposed(by: self.disposeBag)
         
-        /// 倍速按钮
+        // 倍速按钮
         self.controlView.speedBtn.rx.tap
             .subscribe { [weak self] _ in
                 guard let `self` = self else { return }
                 self.showSpeedMenuItmes()
             }.disposed(by: self.disposeBag)
         
-        /// 背景
+        // 背景隐藏speed菜单
         self.popBkgView.rx.tap
             .subscribe { [weak self] _ in
                 guard let `self` = self else { return }
                 self.hideSpeedMenu()
+            }.disposed(by: self.disposeBag)
+        
+        
+        // 是否隐藏控制栏
+        self.playerManager.controlState
+            .subscribe { [weak self] isShow in
+                guard let `self` = self else { return }
+                if isShow {
+                    self.showControl()
+                }else{
+                    self.dismissControl()
+                }
+            }.disposed(by: self.disposeBag)
+        
+        // 播放完成监听
+        self.playerManager.playFinishedState
+            .subscribe { [weak self] finished in
+                guard let `self` = self else { return }
+                self.delegate?.videoPlayerDidFinishPlaying(self)
             }.disposed(by: self.disposeBag)
     }
     
@@ -204,18 +242,61 @@ class LSPlayerViewController: UIViewController, UIPopoverPresentationControllerD
         self.view.layer.insertSublayer(playerLayer, at: 0)
     }
     
+    
+    
     /// 加载数据
-    public func loadVideoData(url: URL) {
-        self.playerManager.loadVideo(url)
+    //    public func loadVideoData(url: URL) {
+    //        self.playerManager.loadVideo(url)
+    //            .subscribe(onSuccess: { [weak self] player in
+    //                guard let `self` = self else { return }
+    //                self.playerLayer.player = player
+    //                self.playerManager.play()
+    //                self.enterFullBtn.isHidden = false
+    //                self.controlView.isUserInteractionEnabled = true
+    //                self.tapAction()
+    //            }, onFailure: { error in
+    //                print("视频加载失败: \(error)")
+    //            })
+    //            .disposed(by: disposeBag)
+    //    }
+    
+    /// 新方法：加载视频、字幕和封面
+    public func loadVideo(from videoURL: URL,
+                          withSubtitle subtitleURL: URL? = nil,
+                          coverImgUrlStr: String? = nil,
+                          completed: @escaping () -> Void) {
+        
+        // 1. 如果有封面图片URL，先加载封面
+        if let coverUrlStr = coverImgUrlStr, let coverURL = URL(string: coverUrlStr) {
+            loadCoverImage(from: coverURL)
+        }
+        
+        // 2. 加载视频和字幕
+        self.playerManager.loadVideo(videoURL, subtitleURL: subtitleURL)
             .subscribe(onSuccess: { [weak self] player in
-                guard let `self` = self else { return }
+                guard let self = self else { return }
+                
+                // 设置播放器
                 self.playerLayer.player = player
+                
+                // 隐藏封面图片
+                self.hideCoverImage()
+                
+                // 开始播放
                 self.playerManager.play()
+                self.delegate?.videoPlayerDidStartPlaying(self)
+                
+                // 更新UI
                 self.enterFullBtn.isHidden = false
                 self.controlView.isUserInteractionEnabled = true
                 self.tapAction()
+                
+                // 回调完成
+                completed()
+                
             }, onFailure: { error in
                 print("视频加载失败: \(error)")
+                completed()
             })
             .disposed(by: disposeBag)
     }
@@ -230,9 +311,42 @@ class LSPlayerViewController: UIViewController, UIPopoverPresentationControllerD
         }
     }
     
-    @objc func playAndPauseBtnAction() {
+    
+    /// 加载封面图片
+    private func loadCoverImage(from url: URL) {
+        // 创建封面图片视图
+        let coverImageView = UIImageView()
+        coverImageView.contentMode = .scaleAspectFill
+        coverImageView.backgroundColor = .black
+        coverImageView.clipsToBounds = true
+        coverImageView.frame = self.view.bounds
+        coverImageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         
+        // 添加到视图层级
+        self.view.insertSubview(coverImageView, belowSubview: playAndPauseBtn)
+        self.coverImageView = coverImageView
+        
+        // 加载图片
+        DispatchQueue.global().async {
+            if let data = try? Data(contentsOf: url),
+               let image = UIImage(data: data) {
+                DispatchQueue.main.async {
+                    coverImageView.image = image
+                }
+            }
+        }
     }
+    
+    /// 隐藏封面图片
+    private func hideCoverImage() {
+        UIView.animate(withDuration: 0.3, animations: {
+            self.coverImageView?.alpha = 0
+        }) { _ in
+            self.coverImageView?.removeFromSuperview()
+            self.coverImageView = nil
+        }
+    }
+    
 }
 
 extension LSPlayerViewController: LSFullPlayerViewControllerDelegate {
