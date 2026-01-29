@@ -44,7 +44,7 @@ class ViewController: UIViewController {
     
     /// 在加里添加视频URL
     @objc private func loadBtnAction() {
-        guard let url = URL.init(string: "https://vdept3.bdstatic.com/mda-sarbf9mupzedkdpb/cae_h264/1769427918112060187/mda-sarbf9mupzedkdpb.mp4?v_from_s=hkapp-haokan-hna&auth_key=1769609249-0-0-bdd041f2e01a9f81cbc16f84e16d39cf&bcevod_channel=searchbox_feed&pd=1&cr=0&cd=0&pt=3&logid=0449597353&vid=2101463583136116339&klogid=0449597353&abtest=") else {
+        guard let url = URL.init(string: "https://oss.laserpecker.net/app/lso/video/LSO_VIDEO_260120.mp4?preview=2") else {
             return
         }
         playerVC.loadVideo(from: url) {

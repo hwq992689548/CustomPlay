@@ -48,6 +48,29 @@ class LSPlayManager: NSObject {
     private var videoUrl: String?
     
     public var isDragProgress: Bool = false
+    
+    override init() {
+        super.init()
+        setupAudioSession()
+    }
+    
+    /// 确保有音频可用，失败的话，可能会不出声音
+    private func setupAudioSession() {
+        do {
+            // 配置音频会话
+            let audioSession = AVAudioSession.sharedInstance()
+            // 设置为播放模式
+            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [])
+            // 激活音频会话
+            try audioSession.setActive(true)
+            
+            // 设置音频输出（避免使用蓝牙耳机时的延迟问题）
+            try audioSession.setPreferredOutputNumberOfChannels(2)
+            print("✅ 音频会话配置成功")
+        } catch {
+            print("❌ 音频会话配置失败: \(error)")
+        }
+    }
   
     /// 加载video数据
     func loadVideo(_ url: URL, subtitleURL: URL? = nil) -> Single<AVPlayer> {

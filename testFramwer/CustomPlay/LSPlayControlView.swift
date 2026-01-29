@@ -23,8 +23,8 @@ class LSPlayControllerView: UIView {
     public lazy var progressView: LSProgressTrackSlider = {
         let progress = LSProgressTrackSlider()
         progress.backgroundColor = .clear
-        progress.maximumTrackTintColor = .gray
-        progress.minimumTrackTintColor = .white
+//        progress.trackTintColor = .white
+//        progress.progressTintColor  = .gray
 //        progress.isUserInteractionEnabled = false
         return progress
     }()

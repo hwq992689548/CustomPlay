@@ -151,7 +151,7 @@ class LSPlayerViewController: UIViewController {
     /// rx监听
     private func addRxObserver() {
         // 监听拖拽开始事件（用于暂停播放）
-        self.controlView.progressView.rx.controlEvent([.touchUpInside, .touchUpOutside, .touchCancel])
+        self.controlView.progressView.slider.rx.controlEvent([.touchUpInside, .touchUpOutside, .touchCancel])
             .subscribe(onNext: { [weak self] _ in  // 参数是 Void，不是 progress
                 guard let self = self else { return }
                 let currentProgress = self.controlView.progressView.value
@@ -165,7 +165,7 @@ class LSPlayerViewController: UIViewController {
             .disposed(by: disposeBag)
         
         /// 靠诉manager不要更新time
-        self.controlView.progressView.rx.controlEvent([.touchDown])
+        self.controlView.progressView.slider.rx.controlEvent([.touchDown])
             .subscribe(onNext: { [weak self] _ in
                 guard let self = self else { return }
                 print("touchDown")
