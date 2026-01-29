@@ -17,6 +17,7 @@ enum VideoError: Error {
     case unknown
 }
 class LSPlayManager: NSObject {
+
     /// 播放player
     public var player: AVPlayer = AVPlayer()
     /// 用来获取plyer的播放时长以及当前时间
@@ -25,7 +26,8 @@ class LSPlayManager: NSObject {
     
     /// 默认1倍速度播放
     var speed: CGFloat = 1
-    
+    private let userDefaults = UserDefaults.standard
+
     /// 监听
     let currentTime = BehaviorRelay<Double>(value: 0)
     let duration = BehaviorRelay<Double>(value: 0)
@@ -38,68 +40,18 @@ class LSPlayManager: NSObject {
     private var tapTimer: Timer?
     /// 控件隐藏-显示
     let controlState = BehaviorRelay<Bool>(value: false)
+    
+    /// 控件显示、隐藏
     private var controlIsShow: Bool = true
     
-    /// 加载video数据
-//    func loadVideo(_ url: URL, subtitleURL: URL?) -> Single<AVPlayer> {
-//        return Single.create { single in
-//            let asset = AVAsset(url: url)
-//            let keysToLoad = ["duration", "playable"]
-//            
-//            asset.loadValuesAsynchronously(forKeys: keysToLoad) {
-//                var durationError: NSError?
-//                let durationStatus = asset.statusOfValue(forKey: "duration", error: &durationError)
-//                
-//                DispatchQueue.main.async {
-//                    switch durationStatus {
-//                    case .loaded:
-//                        // 检查视频时长是否有效
-//                        let totalSeconds = asset.duration.seconds
-//                        guard totalSeconds > 0, !totalSeconds.isNaN, !totalSeconds.isInfinite else {
-//                            //single(.error(VideoError.invalidDuration))
-//                            single(.failure(VideoError.invalidDuration))
-//                            return
-//                        }
-//                        
-//                        // 更新duration（假设这是类的一个属性）
-//                        self.duration.accept(totalSeconds)
-//                        
-//                        // 创建playerItem并设置
-//                        let playerItem = AVPlayerItem(asset: asset)
-//                        self.player.replaceCurrentItem(with: playerItem)
-//                        self.player.externalPlaybackVideoGravity = .resizeAspect
-//                        self.setupObservers()
-//                        self.setupNotifications()
-//                        
-//                        // 发出成功事件
-//                        single(.success(self.player))
-//                        
-//                    case .failed:
-//                        let error = durationError ?? NSError(
-//                            domain: "VideoLoader",
-//                            code: -1,
-//                            userInfo: [NSLocalizedDescriptionKey: "加载视频元数据失败"]
-//                        )
-//                        single(.failure(error))
-//                    case .cancelled:
-//                        single(.failure(VideoError.cancelled))
-//                        
-//                    default:
-//                        // 处理其他状态
-//                        single(.failure(VideoError.unknown))
-//                    }
-//                }
-//            }
-//            
-//            // 返回Disposable，处理取消
-//            return Disposables.create {
-//                asset.cancelLoading()
-//            }
-//        }
-//    }
-//
+    /// video的URL
+    private var videoUrl: String?
+    
+    public var isDragProgress: Bool = false
+  
     /// 加载video数据
     func loadVideo(_ url: URL, subtitleURL: URL? = nil) -> Single<AVPlayer> {
+        self.videoUrl = url.description
         return Single.create { [weak self] single in
             guard let self = self else {
                 single(.failure(VideoError.unknown))
@@ -145,11 +97,22 @@ class LSPlayManager: NSObject {
                         // 设置播放器
                         self.player.replaceCurrentItem(with: playerItem)
                         self.player.externalPlaybackVideoGravity = .resizeAspect
+                        // 去读取本地的播放进度
+                        let savedProgress = self.getPlaybackProgress(videoUrl: url.description)
+                        if  savedProgress > 0 {
+                            // 恢复播放进度
+                            self.player.pause()
+                            let seekTime = CMTime(seconds: savedProgress, preferredTimescale: 600)
+                            self.player.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+                                guard let self = self else { return }
+                                single(.success(self.player))
+                            }
+                        } else {
+                            // 没有保存的进度，从头开始播放
+                            single(.success(self.player))
+                        }
                         self.setupObservers()
                         self.setupNotifications()
-                        
-                        // 发出成功事件
-                        single(.success(self.player))
                         
                     case .failed:
                         let error = durationError ?? NSError(
@@ -281,7 +244,7 @@ class LSPlayManager: NSObject {
         }
     }
     
-    
+    /// 添加通知
     private func setupNotifications() {
         // 动移除后，再添加，防止添加多次
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
@@ -306,6 +269,7 @@ class LSPlayManager: NSObject {
         self.pause()
         player.seek(to: CMTime.zero)
         playFinishedState.accept(true)
+        self.clearPlaybackProgress()
     }
     
     @objc private func applicationWillResignActive() {
@@ -322,8 +286,14 @@ class LSPlayManager: NSObject {
     
     /// 暂停
     func pause() {
+        
         player.pause()
+        
+        // 播放状态
         isPlaying.accept(false)
+        
+        // 暂停时保持播放时间
+        self.savePlaybackProgress(videoUrl: self.videoUrl)
     }
     
     /// 跳转到播放时间
@@ -344,7 +314,7 @@ class LSPlayManager: NSObject {
         player.pause()
     }
     
-    /// 是否显示控件逻辑
+    /// 显示、隐藏控件
     public func tapAction() {
         if let time = self.tapTimer {
             time.invalidate()
@@ -360,9 +330,86 @@ class LSPlayManager: NSObject {
         controlState.accept(self.controlIsShow)
         tapTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false, block: { [weak self] pTime in
             guard let `self` = self else { return }
+            if self.isDragProgress {
+                return
+            }
             self.controlIsShow = false
             controlState.accept(self.controlIsShow)
         })
     }
     
+    /// 松开拖动progress
+    func setNormalDrag() {
+        self.isDragProgress = false
+        self.controlIsShow = false
+        self.tapAction()
+    }
+
+    /// 松手的时候设置进度
+    func setProgress(_ progress: Double) {
+        let duration = self.player.currentItem?.duration.seconds ?? 0
+        let cur = duration * progress
+        
+        let isPlaying = self.isPlaying.value
+        self.player.pause()
+        let seekTime = CMTime(seconds: cur, preferredTimescale: 600)
+        self.player.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            guard let self = self else { return }
+            if isPlaying {
+                self.play()
+            }
+        }
+
+    }
+}
+
+/**
+ 已暂停
+ 时间: 18.387883146秒
+ lastPlayTime_892623
+ 播放暂停
+ */
+/// 保存播放的时间
+extension LSPlayManager {
+    
+    /// 读取上一次的播放进度和播放时间
+    func getPlaybackProgress(videoUrl: String) -> CGFloat {
+        let videoId = self.getShortKeykey(urlStr: videoUrl)
+        let timeInSeconds = userDefaults.value(forKey: "lastPlayTime_\(videoId)")
+        guard let timeInSeconds = timeInSeconds as? CGFloat, timeInSeconds > 0 else {
+            return 0
+        }
+        return timeInSeconds
+    }
+    
+    // 保存播放进度
+    func savePlaybackProgress(videoUrl: String?) {
+        guard let videoUrl = videoUrl else {
+            return
+        }
+        let videoId = self.getShortKeykey(urlStr: videoUrl.description)
+        let currentTime = player.currentTime()
+        // 转换为秒
+        let currentTimeInSeconds = CMTimeGetSeconds(currentTime)
+        // 避免除零和无效值
+        guard currentTimeInSeconds.isFinite && !currentTimeInSeconds.isNaN
+              else {
+            return
+        }
+        // 保存到 UserDefaults
+        userDefaults.setValue(CGFloat(currentTimeInSeconds), forKey: "lastPlayTime_\(videoId)")
+        userDefaults.synchronize()
+    }
+    
+    // 清除保存的进度
+    func clearPlaybackProgress() {
+        let videoId = self.getShortKeykey(urlStr: self.videoUrl ?? "")
+        userDefaults.removeObject(forKey: "playbackProgress_\(videoId)")
+        userDefaults.removeObject(forKey: "lastPlayTime_\(videoId)")
+    }
+    
+    /// 保存的key
+    private func getShortKeykey(urlStr: String) -> String {
+        return "\(abs(urlStr.hash) % 1000000)"  // 限制在6位数字
+    }
 }

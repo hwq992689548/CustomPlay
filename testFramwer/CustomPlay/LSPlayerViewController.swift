@@ -150,6 +150,30 @@ class LSPlayerViewController: UIViewController {
     
     /// rx监听
     private func addRxObserver() {
+        // 监听拖拽开始事件（用于暂停播放）
+        self.controlView.progressView.rx.controlEvent([.touchUpInside, .touchUpOutside, .touchCancel])
+            .subscribe(onNext: { [weak self] _ in  // 参数是 Void，不是 progress
+                guard let self = self else { return }
+                let currentProgress = self.controlView.progressView.value
+                self.playerManager.setProgress(Double(currentProgress))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: {
+                    self.controlView.isPanGesture = false
+                    self.playerManager.isDragProgress = false
+                    self.playerManager.setNormalDrag()
+                })
+            })
+            .disposed(by: disposeBag)
+        
+        /// 靠诉manager不要更新time
+        self.controlView.progressView.rx.controlEvent([.touchDown])
+            .subscribe(onNext: { [weak self] _ in
+                guard let self = self else { return }
+                print("touchDown")
+                self.controlView.isPanGesture = true
+                self.playerManager.isDragProgress = true
+            })
+            .disposed(by: disposeBag)
+        
         // 当前时间
         self.playerManager.currentTime
             .subscribe { [weak self] time in
@@ -424,3 +448,7 @@ extension LSPlayerViewController: UIGestureRecognizerDelegate {
     }
 }
 
+
+extension LSPlayerViewController {
+    
+}

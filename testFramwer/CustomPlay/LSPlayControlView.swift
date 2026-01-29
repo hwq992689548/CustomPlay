@@ -18,13 +18,14 @@ class LSPlayControllerView: UIView {
     // MARK: - Relays
     let playRelay = PublishRelay<Bool>()
     let fullScreenRelay = PublishRelay<Bool>()
-    
+
     // MARK: - UI Components
-    private lazy var progressView: UIProgressView = {
-        let progress = UIProgressView()
+    public lazy var progressView: LSProgressTrackSlider = {
+        let progress = LSProgressTrackSlider()
         progress.backgroundColor = .clear
-        progress.progressTintColor = .white
-        progress.trackTintColor = .gray
+        progress.maximumTrackTintColor = .gray
+        progress.minimumTrackTintColor = .white
+//        progress.isUserInteractionEnabled = false
         return progress
     }()
     
@@ -54,14 +55,18 @@ class LSPlayControllerView: UIView {
     // MARK: - Public Properties
     var progress: Double = 0 {
         didSet {
-            progressView.progress = Float(progress)
+            if isPanGesture {
+                return
+            }
+            progressView.value = Float(progress)
         }
     }
+    
+    var isPanGesture: Bool = false
     
     var currentTime: Double = 0 {
         didSet {
             currentTimeLab.text = formatTime(currentTime)
-            
         }
     }
     
@@ -133,3 +138,4 @@ class LSPlayControllerView: UIView {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 }
+

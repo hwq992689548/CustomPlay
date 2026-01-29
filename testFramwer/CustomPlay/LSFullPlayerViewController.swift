@@ -193,10 +193,6 @@ class LSFullPlayerViewController: UIViewController {
         bkgView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
-        
-//        let tap = UITapGestureRecognizer.init(target: self, action: #selector(tapAction))
-//        tap.numberOfTouchesRequired = 1
-//        self.view.addGestureRecognizer(tap)
     }
     
     @objc func tapAction() {
